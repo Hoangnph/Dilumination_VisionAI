@@ -1,0 +1,19 @@
+{
+    "database": {
+        "host": "localhost",
+        "port": 5432,
+        "database": "people_counter",
+        "user": "postgres",
+        "password": "postgres"
+    },
+    "logging": {
+        "enable_csv": true,
+        "enable_database": true,
+        "csv_file_path": "utils/data/logs/counting_data.csv"
+    },
+    "features": {
+        "real_time_metrics": true,
+        "alert_logging": true,
+        "session_tracking": true
+    }
+}

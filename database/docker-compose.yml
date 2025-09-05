@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: people_counter_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: people_counter
+      POSTGRES_USER: ${DB_USER:-people_counter_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password_123}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C"
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schemas:/docker-entrypoint-initdb.d/schemas:ro
+      - ./database/scripts:/docker-entrypoint-initdb.d/scripts:ro
+      - ./database/migrations:/docker-entrypoint-initdb.d/migrations:ro
+    networks:
+      - people_counter_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-people_counter_user} -d people_counter"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: people_counter_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - people_counter_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Database backup service
+  postgres-backup:
+    image: postgres:15-alpine
+    container_name: people_counter_backup
+    restart: "no"
+    environment:
+      POSTGRES_DB: people_counter
+      POSTGRES_USER: ${DB_USER:-people_counter_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password_123}
+      PGPASSWORD: ${DB_PASSWORD:-secure_password_123}
+    volumes:
+      - ./database/backups:/backups
+      - ./database/scripts/backup.sh:/backup.sh:ro
+    networks:
+      - people_counter_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: /bin/sh -c "while true; do sleep 3600; done"
+    profiles:
+      - backup
+
+  # Database monitoring with pgAdmin (optional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: people_counter_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@peoplecounter.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "${PGADMIN_PORT:-8080}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - people_counter_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  people_counter_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
