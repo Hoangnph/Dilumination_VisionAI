@@ -22,6 +22,8 @@ from imutils.video import FPS
 from tracker.centroidtracker import CentroidTracker
 from tracker.trackableobject import TrackableObject
 from utils import thread
+from dbConnect import PeopleCounterDB, PeopleCounterLogger
+from dbConnect.simple_async_logger import SimpleAsyncLogger
 
 # execution start time
 start_time = time.time()
@@ -76,7 +78,7 @@ def send_mail():
 	except Exception as e:
 		logger.error(f"Failed to send email: {e}")
 
-def log_data(move_in, in_time, move_out, out_time):
+def log_data(move_in, in_time, move_out, out_time, db_logger=None):
 	# function to log the counting data
 	data = [move_in, in_time, move_out, out_time]
 	# transpose the data to align the columns properly
@@ -91,12 +93,76 @@ def log_data(move_in, in_time, move_out, out_time):
 		if myfile.tell() == 0: # check if header rows are already existing
 			wr.writerow(("Move In", "In Time", "Move Out", "Out Time"))
 			wr.writerows(export_data)
+	
+	# Log to database if logger is available
+	if db_logger:
+		db_logger.log_movement_data(move_in, in_time, move_out, out_time)
+
+def log_person_movement(objectID, direction, centroid, bounding_box, totalFrames, simple_logger=None):
+	"""
+	Helper function to log confirmed in/out events asynchronously
+	Only logs confirmed movements, not real-time data
+	"""
+	if simple_logger:
+		simple_logger.log_event_async(
+			event_type=direction,
+			person_id=objectID,
+			centroid=centroid,
+			bounding_box=bounding_box,
+			confidence=0.95,  # Default confidence
+			frame_number=totalFrames
+		)
 
 def people_counter_complete():
 	"""
 	Complete people counter with all features from original version
 	"""
 	args = parse_arguments()
+	
+	# Initialize database connection and simple async logger
+	db_instance = None
+	db_logger = None
+	simple_logger = None
+	
+	try:
+		# Import datetime explicitly to avoid conflicts
+		from datetime import datetime as dt
+		
+		db_instance = PeopleCounterDB()
+		if db_instance.test_connection():
+			logger.info("Database connection established")
+			
+			# Initialize simple async logger for confirmed events only
+			simple_logger = SimpleAsyncLogger(
+				db_instance=db_instance,
+				max_queue_size=100  # Small queue for events only
+			)
+			
+			# Start session
+			session_name = f"People Counter Session - {dt.now().strftime('%Y-%m-%d %H:%M')}"
+			input_source = args.get("input", "webcam")
+			session_id = db_instance.start_session({
+				'session_name': session_name,
+				'input_source': input_source
+			})
+			
+			if session_id:
+				logger.info(f"Database session started: {session_id}")
+				# Start simple async logger
+				if simple_logger.start(session_id):
+					logger.info("Simple async logger started - only logging confirmed in/out events")
+				else:
+					logger.warning("Failed to start simple async logger")
+					simple_logger = None
+			
+			# Keep CSV logger as fallback
+			db_logger = PeopleCounterLogger(enable_csv=True, enable_db=False)
+		else:
+			logger.warning("Database connection failed, using CSV logging only")
+			db_logger = PeopleCounterLogger(enable_csv=True, enable_db=False)
+	except Exception as e:
+		logger.warning(f"Database initialization failed: {e}, using CSV logging only")
+		db_logger = PeopleCounterLogger(enable_csv=True, enable_db=False)
 	
 	# initialize the list of class labels MobileNet SSD was trained to
 	# detect, then generate a set of bounding box colors for each class
@@ -272,20 +338,26 @@ def people_counter_complete():
 					# line, count the object
 					if direction < 0 and centroid[1] < H // 2:
 						totalUp += 1
-						date_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+						date_time = dt.now().strftime("%Y-%m-%d %H:%M")
 						move_out.append(totalUp)
 						out_time.append(date_time)
 						to.counted = True
 						logger.info(f"Person {objectID} exited (moving up)")
+						
+						# Log confirmed out event to database asynchronously (non-blocking)
+						log_person_movement(objectID, 'out', centroid, (startX, startY, endX, endY), totalFrames, simple_logger)
 
 					# if the direction is positive (indicating the object
 					# is moving down) AND the centroid is below the
 					# center line, count the object
 					elif direction > 0 and centroid[1] > H // 2:
 						totalDown += 1
-						date_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+						date_time = dt.now().strftime("%Y-%m-%d %H:%M")
 						move_in.append(totalDown)
 						in_time.append(date_time)
+						
+						# Log confirmed in event to database asynchronously (non-blocking)
+						log_person_movement(objectID, 'in', centroid, (startX, startY, endX, endY), totalFrames, simple_logger)
 						
 						# if the people limit exceeds over threshold, send an email alert
 						if sum(total) >= config["Threshold"]:
@@ -297,6 +369,10 @@ def people_counter_complete():
 								email_thread.daemon = True
 								email_thread.start()
 								logger.info("Alert sent!")
+							
+							# Log alert to database
+							if db_logger:
+								db_logger.check_and_log_alert(sum(total), config["Threshold"])
 						
 						to.counted = True
 						logger.info(f"Person {objectID} entered (moving down)")
@@ -343,9 +419,12 @@ def people_counter_complete():
 			cv2.putText(frame, text, (265, H - ((i * 20) + 60)),
 				cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-		# initiate a simple log to save the counting data
-		if config["Log"]:
-			log_data(move_in, in_time, move_out, out_time)
+			# initiate a simple log to save the counting data
+	# CSV logging temporarily disabled - using database only
+	# if config["Log"]:
+	#	log_data(move_in, in_time, move_out, out_time, db_logger)
+		
+		# Note: Real-time metrics logging removed - only log confirmed in/out events
 
 		# check to see if we should write the frame to disk
 		if writer is not None:
@@ -377,6 +456,17 @@ def people_counter_complete():
 	logger.info("Elapsed time: {:.2f}".format(fps.elapsed()))
 	logger.info("Approx. FPS: {:.2f}".format(fps.fps()))
 	logger.info("Final Count - Enter: {}, Exit: {}, Inside: {}".format(totalDown, totalUp, totalDown - totalUp))
+	
+	# Cleanup simple async logger
+	if simple_logger:
+		logger.info("Stopping simple async logger...")
+		simple_logger.stop()
+		logger.info(f"Simple async logger stats: {simple_logger.get_stats()}")
+	
+	# End database session
+	if db_instance and session_id:
+		db_instance.end_session('completed')
+		logger.info("Database session ended")
 
 	# check to see if we need to release the video writer pointer
 	if writer is not None:
