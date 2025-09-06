@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
             }
           }, 50);
         }
-      }, 500); // Increased delay to 500ms
+      }, 1000); // Increased delay to 1000ms
 
       // Send heartbeat every 30 seconds to keep connection alive
       const heartbeatInterval = setInterval(() => {

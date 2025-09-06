@@ -109,6 +109,9 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
         console.log(`✅ EventSource readyState after open: ${eventSource.readyState}`);
         console.log(`✅ EventSource readyState constant: ${EventSource.OPEN}`);
         console.log(`✅ EventSource readyState comparison: ${eventSource.readyState === EventSource.OPEN}`);
+        console.log(`✅ EventSource readyState comparison with 1: ${eventSource.readyState === 1}`);
+        console.log(`✅ EventSource readyState comparison with 0: ${eventSource.readyState === 0}`);
+        console.log(`✅ EventSource readyState comparison with 2: ${eventSource.readyState === 2}`);
         setIsConnected(true);
         setIsConnecting(false);
         setError(null);
