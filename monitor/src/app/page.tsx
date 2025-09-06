@@ -18,12 +18,12 @@ export default function DashboardPage() {
   };
 
   const handleViewDetails = (sessionId: string) => {
-    console.log('View details for session:', sessionId);
+    // console.log('View details for session:', sessionId);
     // TODO: Navigate to session details page
   };
 
   const handleStopSession = (sessionId: string) => {
-    console.log('Stop session:', sessionId);
+    // console.log('Stop session:', sessionId);
     // TODO: Implement stop session functionality
   };
 

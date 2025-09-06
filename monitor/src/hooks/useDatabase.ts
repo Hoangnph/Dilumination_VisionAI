@@ -22,19 +22,19 @@ export function useSessions(page: number = 1, limit: number = 10) {
     try {
       setLoading(true);
       setError(null);
-      console.log('Fetching sessions...');
+      // console.log('Fetching sessions...');
       const response = await databaseService.getSessions(page, limit);
-      console.log('Sessions response:', response);
+      // console.log('Sessions response:', response);
       
       if (response.success && response.data) {
-        console.log('Setting sessions data:', response.data);
+        // console.log('Setting sessions data:', response.data);
         setSessions(response.data);
       } else {
-        console.error('Failed to fetch sessions:', response.error);
+        // console.error('Failed to fetch sessions:', response.error);
         setError(response.error || 'Failed to fetch sessions');
       }
     } catch (err) {
-      console.error('Error in fetchSessions:', err);
+      // console.error('Error in fetchSessions:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
@@ -75,8 +75,8 @@ export function useActiveSessions() {
   useEffect(() => {
     fetchActiveSessions();
     
-    // Poll for updates every 5 seconds
-    const interval = setInterval(fetchActiveSessions, 5000);
+    // Poll for updates every 20 seconds (further reduced frequency)
+    const interval = setInterval(fetchActiveSessions, 20000);
     return () => clearInterval(interval);
   }, [fetchActiveSessions]);
 
@@ -141,8 +141,8 @@ export function useRealtimeMetrics(sessionId?: string) {
   useEffect(() => {
     fetchMetrics();
     
-    // Poll for updates every 2 seconds for real-time data
-    const interval = setInterval(fetchMetrics, 2000);
+    // Poll for updates every 10 seconds for real-time data (further reduced frequency)
+    const interval = setInterval(fetchMetrics, 10000);
     return () => clearInterval(interval);
   }, [fetchMetrics]);
 
@@ -176,8 +176,8 @@ export function useDashboardStats() {
   useEffect(() => {
     fetchStats();
     
-    // Poll for updates every 10 seconds
-    const interval = setInterval(fetchStats, 10000);
+    // Poll for updates every 15 seconds (reduced frequency)
+    const interval = setInterval(fetchStats, 15000);
     return () => clearInterval(interval);
   }, [fetchStats]);
 

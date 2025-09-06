@@ -27,7 +27,16 @@ interface SessionCardProps {
   onStopSession?: (sessionId: string) => void;
 }
 
-function SessionCard({ session, onViewDetails, onStopSession }: SessionCardProps) {
+interface ActiveSessionsProps {
+  sessions: Session[];
+  loading: boolean;
+  isConnected?: boolean;
+  onRefresh?: () => void;
+  onViewDetails?: (sessionId: string) => void;
+  onStopSession?: (sessionId: string) => void;
+}
+
+const SessionCard = React.memo(function SessionCard({ session, onViewDetails, onStopSession }: SessionCardProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
@@ -167,18 +176,9 @@ function SessionCard({ session, onViewDetails, onStopSession }: SessionCardProps
       </CardContent>
     </Card>
   );
-}
+});
 
-interface ActiveSessionsProps {
-  sessions: Session[];
-  loading: boolean;
-  isConnected?: boolean;
-  onRefresh?: () => void;
-  onViewDetails?: (sessionId: string) => void;
-  onStopSession?: (sessionId: string) => void;
-}
-
-export default function ActiveSessions({
+const ActiveSessions = React.memo(function ActiveSessions({
   sessions,
   loading,
   isConnected,
@@ -267,4 +267,6 @@ export default function ActiveSessions({
       )}
     </Box>
   );
-}
+});
+
+export default ActiveSessions;

@@ -1,38 +1,26 @@
+/**
+ * Clean SSE Hook
+ * Refactored useSSE hook using clean architecture principles
+ */
+
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { SSEConnectionService } from '@/services/sse-connection.service';
+import { SSEMessageService } from '@/services/sse-message.service';
+import { SSEOptions, SSEMessage, SSEConnectionState } from '@/types/sse';
+import { Session, PeopleMovement, AlertLog, RealtimeMetrics } from '@/types/database';
 
-// SSE Message types
-export interface SSEMessage {
-  type: 'connection' | 'data' | 'error' | 'heartbeat';
-  data?: any;
-  message?: string;
-  error?: string;
-  timestamp: string;
-}
-
-// SSE Hook options
-export interface SSEOptions {
-  sessionId?: string;
-  resolved?: boolean;
-  onMessage?: (message: SSEMessage) => void;
-  onError?: (error: Event) => void;
-  onOpen?: () => void;
-  onClose?: () => void;
-  autoReconnect?: boolean;
-  reconnectInterval?: number;
-}
-
-// Custom hook for SSE connections
 export function useSSE(endpoint: string, options: SSEOptions = {}) {
+  // State management
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastMessage, setLastMessage] = useState<SSEMessage | null>(null);
+  const [connectionState, setConnectionState] = useState<SSEConnectionState>('idle');
   
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Refs for cleanup
+  const connectionServiceRef = useRef<SSEConnectionService | null>(null);
   const isMountedRef = useRef(true);
 
   const {
@@ -42,178 +30,148 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
     onError,
     onOpen,
     onClose,
-    autoReconnect = false, // Disable auto-reconnect for debugging
-    reconnectInterval = 5000
+    autoReconnect = false,
+    reconnectInterval = 5000,
+    connectionTimeout = 60000
   } = options;
 
-  // Build SSE URL with query parameters
-  const buildSSEUrl = useCallback(() => {
-    const url = new URL(endpoint, window.location.origin);
-    
-    if (sessionId) {
-      url.searchParams.set('session_id', sessionId);
-    }
-    
-    if (resolved !== undefined) {
-      url.searchParams.set('resolved', resolved.toString());
-    }
-    
-    return url.toString();
-  }, [endpoint, sessionId, resolved]);
+  // Initialize connection service
+  useEffect(() => {
+    connectionServiceRef.current = new SSEConnectionService({
+      timeout: connectionTimeout,
+      retryDelay: reconnectInterval,
+    });
+
+    return () => {
+      if (connectionServiceRef.current) {
+        connectionServiceRef.current.destroy();
+      }
+    };
+  }, [connectionTimeout, reconnectInterval]);
 
   // Connect to SSE
-  const connect = useCallback(() => {
-    if (eventSourceRef.current?.readyState === EventSource.OPEN) {
-      return; // Already connected
+  const connect = useCallback(async () => {
+    if (!connectionServiceRef.current || !isMountedRef.current) {
+      return;
+    }
+
+    const service = connectionServiceRef.current;
+
+    // Check if already connected
+    if (service.isConnected()) {
+      // console.log('✅ SSE already connected, skipping');
+      return;
+    }
+
+    // Check if already connecting
+    if (service.getConnectionState() === 'connecting') {
+      // console.log('⏳ SSE connection already in progress');
+      return;
     }
 
     setIsConnecting(true);
     setError(null);
-
-    // Set connection timeout
-    connectionTimeoutRef.current = setTimeout(() => {
-      if (isMountedRef.current && !isConnected) {
-        console.error(`SSE connection timeout for ${endpoint}`);
-        setError('Connection timeout');
-        setIsConnecting(false);
-        setIsConnected(false);
-        
-        // Auto-reconnect on timeout
-        if (autoReconnect && isMountedRef.current) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (isMountedRef.current) {
-              connect();
-            }
-          }, reconnectInterval);
-        }
-      }
-    }, 30000); // 30 second timeout
+    setConnectionState('connecting');
 
     try {
-      const url = buildSSEUrl();
-      console.log(`Connecting to SSE: ${url}`);
-      console.log(`Creating EventSource with URL: ${url}`);
-      const eventSource = new EventSource(url);
-      console.log(`EventSource created successfully`);
-      console.log(`EventSource readyState: ${eventSource.readyState}`);
-      console.log(`EventSource URL: ${eventSource.url}`);
-      console.log(`EventSource withCredentials: ${eventSource.withCredentials}`);
-      eventSourceRef.current = eventSource;
+      await service.connect(endpoint, {
+        onOpen: () => {
+          if (!isMountedRef.current) return;
+          
+          setIsConnected(true);
+          setIsConnecting(false);
+          setError(null);
+          setConnectionState('connected');
+          // console.log('✅ SSE connection established');
+          onOpen?.();
+        },
+        onMessage: (event) => {
+          if (!isMountedRef.current) return;
+          
+          const message = SSEMessageService.parseMessage(event);
+          if (message) {
+            setLastMessage(message);
+            onMessage?.(message);
+          }
+        },
+        onError: (event) => {
+          if (!isMountedRef.current) return;
+          
+          setIsConnected(false);
+          setIsConnecting(false);
+          setConnectionState('error');
+          setError('SSE connection failed');
+          // console.error('❌ SSE connection error:', event);
+          onError?.(event);
 
-      eventSource.onopen = () => {
-        console.log(`✅ SSE connected to ${endpoint}`);
-        console.log(`✅ EventSource readyState: ${eventSource.readyState}`);
-        console.log(`✅ EventSource URL: ${eventSource.url}`);
-        console.log(`✅ EventSource withCredentials: ${eventSource.withCredentials}`);
-        console.log(`✅ Connection established at: ${new Date().toISOString()}`);
-        console.log(`✅ EventSource readyState after open: ${eventSource.readyState}`);
-        console.log(`✅ EventSource readyState constant: ${EventSource.OPEN}`);
-        console.log(`✅ EventSource readyState comparison: ${eventSource.readyState === EventSource.OPEN}`);
-        console.log(`✅ EventSource readyState comparison with 1: ${eventSource.readyState === 1}`);
-        console.log(`✅ EventSource readyState comparison with 0: ${eventSource.readyState === 0}`);
-        console.log(`✅ EventSource readyState comparison with 2: ${eventSource.readyState === 2}`);
-        console.log(`✅ EventSource readyState comparison with 3: ${eventSource.readyState === 3}`);
-        console.log(`✅ EventSource readyState comparison with 4: ${eventSource.readyState === 4}`);
-        console.log(`✅ EventSource readyState comparison with 5: ${eventSource.readyState === 5}`);
-        setIsConnected(true);
-        setIsConnecting(false);
-        setError(null);
-        
-        // Clear connection timeout
-        if (connectionTimeoutRef.current) {
-          clearTimeout(connectionTimeoutRef.current);
-          connectionTimeoutRef.current = null;
+          // Setup auto-reconnect if enabled
+          if (autoReconnect && isMountedRef.current) {
+            service.setupAutoReconnect(endpoint, {
+              onOpen: () => {
+                if (!isMountedRef.current) return;
+                setIsConnected(true);
+                setIsConnecting(false);
+                setError(null);
+                setConnectionState('connected');
+                onOpen?.();
+              },
+              onMessage: (event) => {
+                if (!isMountedRef.current) return;
+                const message = SSEMessageService.parseMessage(event);
+                if (message) {
+                  setLastMessage(message);
+                  onMessage?.(message);
+                }
+              },
+              onError: (event) => {
+                if (!isMountedRef.current) return;
+                setIsConnected(false);
+                setIsConnecting(false);
+                setConnectionState('error');
+                setError('SSE connection failed');
+                onError?.(event);
+              },
+              onClose: () => {
+                if (!isMountedRef.current) return;
+                setIsConnected(false);
+                setIsConnecting(false);
+                setConnectionState('disconnected');
+                onClose?.();
+              }
+            }, { sessionId, resolved });
+          }
+        },
+        onClose: () => {
+          if (!isMountedRef.current) return;
+          
+          setIsConnected(false);
+          setIsConnecting(false);
+          setConnectionState('disconnected');
+          onClose?.();
         }
-        
-        onOpen?.();
-      };
-
-      eventSource.onmessage = (event) => {
-        console.log(`📨 SSE message received:`, event.data);
-        console.log(`📨 Event type:`, event.type);
-        console.log(`📨 Event lastEventId:`, event.lastEventId);
-        try {
-          const message: SSEMessage = JSON.parse(event.data);
-          console.log(`📨 Parsed message:`, message);
-          setLastMessage(message);
-          onMessage?.(message);
-        } catch (err) {
-          console.error('❌ Error parsing SSE message:', err);
-          setError('Failed to parse message');
-        }
-      };
-
-      eventSource.onerror = (event) => {
-        const errorMessage = `❌ SSE connection failed for ${endpoint}`;
-        console.error(errorMessage, {
-          readyState: eventSource.readyState,
-          url: eventSource.url,
-          timestamp: new Date().toISOString(),
-          event: event,
-          withCredentials: eventSource.withCredentials
-        });
-        console.error(`❌ EventSource readyState: ${eventSource.readyState}`);
-        console.error(`❌ EventSource URL: ${eventSource.url}`);
-        console.error(`❌ EventSource withCredentials: ${eventSource.withCredentials}`);
-        console.error(`❌ Error occurred at: ${new Date().toISOString()}`);
-        setIsConnected(false);
-        setIsConnecting(false);
-        setError(errorMessage);
-        onError?.(event);
-
-        // Auto-reconnect if enabled
-        if (autoReconnect && isMountedRef.current) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (isMountedRef.current) {
-              console.log(`Attempting to reconnect to ${endpoint}...`);
-              connect();
-            }
-          }, reconnectInterval);
-        }
-      };
+      }, { sessionId, resolved });
 
     } catch (err) {
-      console.error(`❌ Failed to create SSE connection to ${endpoint}:`, err);
-      console.error(`❌ Error details:`, {
-        message: err instanceof Error ? err.message : 'Unknown error',
-        stack: err instanceof Error ? err.stack : undefined,
-        url: buildSSEUrl()
-      });
-      setError(err instanceof Error ? err.message : 'Connection failed');
+      if (!isMountedRef.current) return;
+      
+      const errorMessage = err instanceof Error ? err.message : 'Connection failed';
+      setError(errorMessage);
       setIsConnected(false);
       setIsConnecting(false);
-      
-      // Auto-reconnect on initial connection failure
-      if (autoReconnect && isMountedRef.current) {
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (isMountedRef.current) {
-            connect();
-          }
-        }, reconnectInterval);
-      }
+      setConnectionState('error');
+      // console.error('❌ SSE connection failed:', err);
     }
-  }, [endpoint, buildSSEUrl, onMessage, onError, onOpen, autoReconnect, reconnectInterval]);
+  }, [endpoint, sessionId, resolved, onMessage, onError, onOpen, onClose, autoReconnect, reconnectInterval, connectionTimeout]);
 
   // Disconnect from SSE
   const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
+    if (connectionServiceRef.current) {
+      connectionServiceRef.current.disconnect();
+      setIsConnected(false);
+      setIsConnecting(false);
+      setConnectionState('disconnected');
+      onClose?.();
     }
-
-    if (connectionTimeoutRef.current) {
-      clearTimeout(connectionTimeoutRef.current);
-      connectionTimeoutRef.current = null;
-    }
-
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
-    setIsConnected(false);
-    setIsConnecting(false);
-    onClose?.();
   }, [onClose]);
 
   // Reconnect manually
@@ -225,10 +183,17 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
   // Auto-connect on mount
   useEffect(() => {
     isMountedRef.current = true;
-    connect();
+    
+    // Small delay to ensure previous connections are cleaned up
+    const connectTimeout = setTimeout(() => {
+      if (isMountedRef.current) {
+        connect();
+      }
+    }, 100);
 
     return () => {
       isMountedRef.current = false;
+      clearTimeout(connectTimeout);
       disconnect();
     };
   }, [connect, disconnect]);
@@ -240,20 +205,34 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
     }
   }, [sessionId, resolved, reconnect]);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      if (connectionServiceRef.current) {
+        connectionServiceRef.current.destroy();
+      }
+    };
+  }, []);
+
   return {
     isConnected,
     isConnecting,
     error,
     lastMessage,
+    connectionState,
     connect,
     disconnect,
-    reconnect
+    reconnect,
+    // Additional utility methods
+    getConnectionUrl: () => connectionServiceRef.current?.getConnectionUrl() || null,
+    getReadyState: () => connectionServiceRef.current?.getReadyState() || EventSource.CLOSED,
   };
 }
 
 // Specific hooks for different data types
 export function useSessionsSSE(sessionId?: string) {
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Fetch initial data
@@ -264,9 +243,14 @@ export function useSessionsSSE(sessionId?: string) {
       const data = await response.json();
       if (data.success && data.data?.data) {
         setSessions(data.data.data);
+      } else {
+        // If no data or empty data, clear sessions
+        setSessions([]);
       }
     } catch (error) {
-      console.error('Error fetching initial sessions:', error);
+      // console.error('Error fetching initial sessions:', error);
+      // On error, clear sessions to avoid stale data
+      setSessions([]);
     } finally {
       setLoading(false);
     }
@@ -279,6 +263,7 @@ export function useSessionsSSE(sessionId?: string) {
 
   const { isConnected, error, lastMessage } = useSSE('/api/sse/sessions', {
     sessionId,
+    autoReconnect: true,
     onMessage: (message) => {
       if (message.type === 'data' && message.data) {
         const { action, data } = message.data;
@@ -289,7 +274,7 @@ export function useSessionsSSE(sessionId?: string) {
               // Check if session already exists to prevent duplicates
               const exists = prevSessions.some(session => session.id === data.id);
               if (exists) {
-                console.log('Session already exists, skipping duplicate:', data.id);
+                // console.log('Session already exists, skipping duplicate:', data.id);
                 return prevSessions;
               }
               return [...prevSessions, data];
@@ -304,6 +289,11 @@ export function useSessionsSSE(sessionId?: string) {
           }
         });
       }
+    },
+    onError: (error) => {
+      // console.error('SSE connection error in useSessionsSSE:', error);
+      // On SSE error, refetch data to ensure consistency
+      fetchInitialData();
     }
   });
 
@@ -311,11 +301,12 @@ export function useSessionsSSE(sessionId?: string) {
 }
 
 export function useMovementsSSE(sessionId?: string) {
-  const [movements, setMovements] = useState<any[]>([]);
+  const [movements, setMovements] = useState<PeopleMovement[]>([]);
   const [loading, setLoading] = useState(true);
 
   const { isConnected, error, lastMessage } = useSSE('/api/sse/movements', {
     sessionId,
+    autoReconnect: true,
     onMessage: (message) => {
       if (message.type === 'data' && message.data) {
         const { action, data } = message.data;
@@ -343,12 +334,13 @@ export function useMovementsSSE(sessionId?: string) {
 }
 
 export function useAlertsSSE(sessionId?: string, resolved?: boolean) {
-  const [alerts, setAlerts] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<AlertLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   const { isConnected, error, lastMessage } = useSSE('/api/sse/alerts', {
     sessionId,
     resolved,
+    autoReconnect: true,
     onMessage: (message) => {
       if (message.type === 'data' && message.data) {
         const { action, data } = message.data;
@@ -376,11 +368,12 @@ export function useAlertsSSE(sessionId?: string, resolved?: boolean) {
 }
 
 export function useMetricsSSE(sessionId?: string) {
-  const [metrics, setMetrics] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState<RealtimeMetrics[]>([]);
   const [loading, setLoading] = useState(true);
 
   const { isConnected, error, lastMessage } = useSSE('/api/sse/metrics', {
     sessionId,
+    autoReconnect: true,
     onMessage: (message) => {
       if (message.type === 'data' && message.data) {
         const { action, data } = message.data;

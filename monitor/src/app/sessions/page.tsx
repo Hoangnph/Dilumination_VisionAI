@@ -42,7 +42,7 @@ export default function SessionsPage() {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('all');
   
-  const { sessions, loading, isConnected, error } = useSessionsSSE();
+  const { sessions, loading, isConnected, error, refetch } = useSessionsSSE();
 
   // Debug logging
   React.useEffect(() => {

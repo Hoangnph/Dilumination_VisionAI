@@ -1,55 +1,10 @@
-import { NextRequest } from 'next/server';
-import { dbListener, createSSEResponse, createSSEMessage, encodeSSEMessage } from '@/lib/sse';
+/**
+ * Metrics SSE API Route
+ * Using SSE Endpoint Factory for consistency
+ */
 
-// Metrics SSE endpoint
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const sessionId = searchParams.get('session_id');
+import { SSEEndpointFactory } from '@/services/sse-endpoint-factory.service';
 
-  const stream = new ReadableStream({
-    start(controller) {
-      const encoder = new TextEncoder();
-      let isClosed = false;
-      
-      // Send initial connection message
-      const connectionMessage = createSSEMessage('connection', null, 'Connected to metrics SSE');
-      controller.enqueue(encoder.encode(encodeSSEMessage(connectionMessage)));
-
-      // Listen for metrics changes
-      const handleMetricsChange = (data: any) => {
-        // Filter by session_id if provided
-        if (sessionId && data.data?.session_id !== sessionId) {
-          return;
-        }
-
-        if (!isClosed) {
-          const message = createSSEMessage('data', data);
-          controller.enqueue(encoder.encode(encodeSSEMessage(message)));
-        }
-      };
-
-      // Start listening
-      dbListener.listen('metrics_changes', handleMetricsChange)
-        .catch(error => {
-          console.error('Error starting metrics listener:', error);
-          if (!isClosed) {
-            const errorMessage = createSSEMessage('error', null, 'Failed to start metrics listener', error.message);
-            controller.enqueue(encoder.encode(encodeSSEMessage(errorMessage)));
-          }
-        });
-
-      // Handle client disconnect
-      request.signal.addEventListener('abort', async () => {
-        isClosed = true;
-        await dbListener.unlisten('metrics_changes', handleMetricsChange);
-        try {
-          controller.close();
-        } catch (error) {
-          // Controller might already be closed, ignore error
-        }
-      });
-    }
-  });
-
-  return createSSEResponse(stream);
-}
+// Create metrics SSE endpoint using factory
+export const GET = SSEEndpointFactory.createMetricsEndpoint();
+export const OPTIONS = SSEEndpointFactory.createOptionsHandler();

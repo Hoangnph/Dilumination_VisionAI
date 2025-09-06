@@ -156,10 +156,12 @@ export default function DashboardStatsCards({
           System Overview
         </Typography>
         {onRefresh && (
-          <Tooltip title="Refresh Data">
-            <IconButton onClick={onRefresh} disabled={loading}>
-              <RefreshIcon />
-            </IconButton>
+          <Tooltip title={loading ? "Refreshing..." : "Refresh Data"}>
+            <span>
+              <IconButton onClick={onRefresh} disabled={loading}>
+                <RefreshIcon />
+              </IconButton>
+            </span>
           </Tooltip>
         )}
       </Box>

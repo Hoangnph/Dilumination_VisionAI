@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import {
   AppBar,
@@ -47,6 +47,33 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     setMobileOpen(false); // Close mobile drawer after navigation
   };
 
+  // Memoize styles to prevent hydration mismatch
+  const mainBoxStyles = useMemo(() => ({
+    display: 'flex'
+  }), []);
+
+  const appBarStyles = useMemo(() => ({
+    width: { md: `calc(100% - ${drawerWidth}px)` },
+    ml: { md: `${drawerWidth}px` },
+    backgroundColor: 'background.paper',
+    borderBottom: '1px solid',
+    borderColor: 'divider',
+  }), []);
+
+  const navBoxStyles = useMemo(() => ({
+    width: { md: drawerWidth },
+    flexShrink: { md: 0 }
+  }), []);
+
+  const mainContentStyles = useMemo(() => ({
+    flexGrow: 1,
+    p: 3,
+    width: { md: `calc(100% - ${drawerWidth}px)` },
+    mt: 8,
+    backgroundColor: 'background.default',
+    minHeight: '100vh',
+  }), []);
+
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
     { text: 'Live Monitoring', icon: <PeopleIcon />, path: '/live' },
@@ -92,16 +119,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   );
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={mainBoxStyles}>
       <AppBar
         position="fixed"
-        sx={{
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          ml: { md: `${drawerWidth}px` },
-          backgroundColor: 'background.paper',
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-        }}
+        sx={appBarStyles}
       >
         <Toolbar>
           <IconButton
@@ -126,7 +147,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
       <Box
         component="nav"
-        sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
+        sx={navBoxStyles}
       >
         <Drawer
           variant="temporary"
@@ -168,14 +189,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
       <Box
         component="main"
-        sx={{
-          flexGrow: 1,
-          p: 3,
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          mt: 8,
-          backgroundColor: 'background.default',
-          minHeight: '100vh',
-        }}
+        sx={mainContentStyles}
       >
         {children}
       </Box>
