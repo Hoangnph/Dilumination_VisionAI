@@ -32,6 +32,7 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
   
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
 
   const {
@@ -69,8 +70,28 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
     setIsConnecting(true);
     setError(null);
 
+    // Set connection timeout
+    connectionTimeoutRef.current = setTimeout(() => {
+      if (isMountedRef.current && !isConnected) {
+        console.error(`SSE connection timeout for ${endpoint}`);
+        setError('Connection timeout');
+        setIsConnecting(false);
+        setIsConnected(false);
+        
+        // Auto-reconnect on timeout
+        if (autoReconnect && isMountedRef.current) {
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (isMountedRef.current) {
+              connect();
+            }
+          }, reconnectInterval);
+        }
+      }
+    }, 10000); // 10 second timeout
+
     try {
       const url = buildSSEUrl();
+      console.log(`Connecting to SSE: ${url}`);
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
 
@@ -78,6 +99,14 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
         console.log(`SSE connected to ${endpoint}`);
         setIsConnected(true);
         setIsConnecting(false);
+        setError(null);
+        
+        // Clear connection timeout
+        if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current);
+          connectionTimeoutRef.current = null;
+        }
+        
         onOpen?.();
       };
 
@@ -93,10 +122,15 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
       };
 
       eventSource.onerror = (event) => {
-        console.error(`SSE error for ${endpoint}:`, event);
+        const errorMessage = `SSE connection failed for ${endpoint}`;
+        console.error(errorMessage, {
+          readyState: eventSource.readyState,
+          url: eventSource.url,
+          timestamp: new Date().toISOString()
+        });
         setIsConnected(false);
         setIsConnecting(false);
-        setError('Connection error');
+        setError(errorMessage);
         onError?.(event);
 
         // Auto-reconnect if enabled
@@ -113,7 +147,17 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
     } catch (err) {
       console.error(`Failed to create SSE connection to ${endpoint}:`, err);
       setError(err instanceof Error ? err.message : 'Connection failed');
+      setIsConnected(false);
       setIsConnecting(false);
+      
+      // Auto-reconnect on initial connection failure
+      if (autoReconnect && isMountedRef.current) {
+        reconnectTimeoutRef.current = setTimeout(() => {
+          if (isMountedRef.current) {
+            connect();
+          }
+        }, reconnectInterval);
+      }
     }
   }, [endpoint, buildSSEUrl, onMessage, onError, onOpen, autoReconnect, reconnectInterval]);
 
@@ -122,6 +166,11 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
+    }
+
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
     }
 
     if (eventSourceRef.current) {
