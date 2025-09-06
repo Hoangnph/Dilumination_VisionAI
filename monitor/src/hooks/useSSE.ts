@@ -253,6 +253,12 @@ export function useSessionsSSE(sessionId?: string) {
         setSessions(prevSessions => {
           switch (action) {
             case 'INSERT':
+              // Check if session already exists to prevent duplicates
+              const exists = prevSessions.some(session => session.id === data.id);
+              if (exists) {
+                console.log('Session already exists, skipping duplicate:', data.id);
+                return prevSessions;
+              }
               return [...prevSessions, data];
             case 'UPDATE':
               return prevSessions.map(session => 
