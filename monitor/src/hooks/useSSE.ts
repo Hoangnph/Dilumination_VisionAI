@@ -99,6 +99,7 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
         console.log(`✅ SSE connected to ${endpoint}`);
         console.log(`✅ EventSource readyState: ${eventSource.readyState}`);
         console.log(`✅ EventSource URL: ${eventSource.url}`);
+        console.log(`✅ EventSource withCredentials: ${eventSource.withCredentials}`);
         setIsConnected(true);
         setIsConnecting(false);
         setError(null);
@@ -133,10 +134,12 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
           readyState: eventSource.readyState,
           url: eventSource.url,
           timestamp: new Date().toISOString(),
-          event: event
+          event: event,
+          withCredentials: eventSource.withCredentials
         });
         console.error(`❌ EventSource readyState: ${eventSource.readyState}`);
         console.error(`❌ EventSource URL: ${eventSource.url}`);
+        console.error(`❌ EventSource withCredentials: ${eventSource.withCredentials}`);
         setIsConnected(false);
         setIsConnecting(false);
         setError(errorMessage);
