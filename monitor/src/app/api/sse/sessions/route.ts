@@ -6,6 +6,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const sessionId = searchParams.get('session_id');
 
+  console.log(`[SSE Sessions] Client connected. Session ID filter: ${sessionId || 'none'}`);
+
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
@@ -14,6 +16,14 @@ export async function GET(request: NextRequest) {
       // Send initial connection message
       const connectionMessage = createSSEMessage('connection', null, 'Connected to sessions SSE');
       controller.enqueue(encoder.encode(encodeSSEMessage(connectionMessage)));
+
+      // Send heartbeat every 30 seconds to keep connection alive
+      const heartbeatInterval = setInterval(() => {
+        if (!isClosed) {
+          const heartbeatMessage = createSSEMessage('heartbeat', null, 'Heartbeat');
+          controller.enqueue(encoder.encode(encodeSSEMessage(heartbeatMessage)));
+        }
+      }, 30000);
 
       // Listen for session changes
       const handleSessionChange = (data: any) => {
@@ -49,7 +59,9 @@ export async function GET(request: NextRequest) {
 
       // Handle client disconnect
       request.signal.addEventListener('abort', async () => {
+        console.log('[SSE Sessions] Client disconnected (abort signal).');
         isClosed = true;
+        clearInterval(heartbeatInterval);
         await dbListener.unlisten('session_changes', handleSessionChange);
         try {
           controller.close();
@@ -61,4 +73,16 @@ export async function GET(request: NextRequest) {
   });
 
   return createSSEResponse(stream);
+}
+
+// Handle OPTIONS request for CORS
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Cache-Control, Content-Type',
+    },
+  });
 }

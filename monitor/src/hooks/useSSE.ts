@@ -87,7 +87,7 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
           }, reconnectInterval);
         }
       }
-    }, 10000); // 10 second timeout
+    }, 30000); // 30 second timeout
 
     try {
       const url = buildSSEUrl();
