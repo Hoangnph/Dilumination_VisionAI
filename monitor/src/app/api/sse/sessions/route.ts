@@ -15,26 +15,33 @@ export async function GET(request: NextRequest) {
       
       // Send initial connection message
       const connectionMessage = createSSEMessage('connection', null, 'Connected to sessions SSE');
+      console.log(`📤 [SSE Sessions] Sending connection message:`, connectionMessage);
       controller.enqueue(encoder.encode(encodeSSEMessage(connectionMessage)));
 
       // Send heartbeat every 30 seconds to keep connection alive
       const heartbeatInterval = setInterval(() => {
         if (!isClosed) {
           const heartbeatMessage = createSSEMessage('heartbeat', null, 'Heartbeat');
+          console.log(`💓 [SSE Sessions] Sending heartbeat:`, heartbeatMessage);
           controller.enqueue(encoder.encode(encodeSSEMessage(heartbeatMessage)));
         }
       }, 30000);
 
       // Listen for session changes
       const handleSessionChange = (data: any) => {
+        console.log(`📨 [SSE Sessions] Session change received:`, data);
         // Filter by session_id if provided
         if (sessionId && data.data?.id !== sessionId) {
+          console.log(`🚫 [SSE Sessions] Filtered out session ${data.data?.id} (not matching ${sessionId})`);
           return;
         }
 
         if (!isClosed) {
           const message = createSSEMessage('data', data);
+          console.log(`📤 [SSE Sessions] Sending session change:`, message);
           controller.enqueue(encoder.encode(encodeSSEMessage(message)));
+        } else {
+          console.log(`🚫 [SSE Sessions] Connection closed, not sending session change`);
         }
       };
 

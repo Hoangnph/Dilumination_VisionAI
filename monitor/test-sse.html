@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SSE Test</title>
+</head>
+<body>
+    <h1>SSE Connection Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="messages"></div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        
+        console.log('🚀 Starting SSE test...');
+        
+        const eventSource = new EventSource('/api/sse/sessions');
+        
+        eventSource.onopen = function(event) {
+            console.log('✅ SSE Connected!');
+            statusDiv.textContent = 'Connected ✅';
+            statusDiv.style.color = 'green';
+        };
+        
+        eventSource.onmessage = function(event) {
+            console.log('📨 Message received:', event.data);
+            const messageDiv = document.createElement('div');
+            messageDiv.textContent = `Message: ${event.data}`;
+            messagesDiv.appendChild(messageDiv);
+        };
+        
+        eventSource.onerror = function(event) {
+            console.error('❌ SSE Error:', event);
+            statusDiv.textContent = 'Error ❌';
+            statusDiv.style.color = 'red';
+        };
+        
+        // Test after 10 seconds
+        setTimeout(() => {
+            console.log('🔄 Testing database insert...');
+            fetch('/api/sessions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    session_name: 'Browser Test Session',
+                    input_source: 'browser_test.mp4',
+                    status: 'active'
+                })
+            }).then(response => {
+                console.log('📤 Insert response:', response.status);
+            }).catch(error => {
+                console.error('❌ Insert error:', error);
+            });
+        }, 10000);
+    </script>
+</body>
+</html>

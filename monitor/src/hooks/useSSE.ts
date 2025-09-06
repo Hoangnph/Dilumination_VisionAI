@@ -42,7 +42,7 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
     onError,
     onOpen,
     onClose,
-    autoReconnect = true,
+    autoReconnect = false, // Disable auto-reconnect for debugging
     reconnectInterval = 5000
   } = options;
 
@@ -96,7 +96,9 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
-        console.log(`SSE connected to ${endpoint}`);
+        console.log(`✅ SSE connected to ${endpoint}`);
+        console.log(`✅ EventSource readyState: ${eventSource.readyState}`);
+        console.log(`✅ EventSource URL: ${eventSource.url}`);
         setIsConnected(true);
         setIsConnecting(false);
         setError(null);
@@ -111,23 +113,28 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
       };
 
       eventSource.onmessage = (event) => {
+        console.log(`📨 SSE message received:`, event.data);
         try {
           const message: SSEMessage = JSON.parse(event.data);
+          console.log(`📨 Parsed message:`, message);
           setLastMessage(message);
           onMessage?.(message);
         } catch (err) {
-          console.error('Error parsing SSE message:', err);
+          console.error('❌ Error parsing SSE message:', err);
           setError('Failed to parse message');
         }
       };
 
       eventSource.onerror = (event) => {
-        const errorMessage = `SSE connection failed for ${endpoint}`;
+        const errorMessage = `❌ SSE connection failed for ${endpoint}`;
         console.error(errorMessage, {
           readyState: eventSource.readyState,
           url: eventSource.url,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          event: event
         });
+        console.error(`❌ EventSource readyState: ${eventSource.readyState}`);
+        console.error(`❌ EventSource URL: ${eventSource.url}`);
         setIsConnected(false);
         setIsConnecting(false);
         setError(errorMessage);
