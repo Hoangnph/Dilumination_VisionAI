@@ -104,6 +104,7 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
         console.log(`✅ EventSource readyState: ${eventSource.readyState}`);
         console.log(`✅ EventSource URL: ${eventSource.url}`);
         console.log(`✅ EventSource withCredentials: ${eventSource.withCredentials}`);
+        console.log(`✅ Connection established at: ${new Date().toISOString()}`);
         setIsConnected(true);
         setIsConnecting(false);
         setError(null);
@@ -144,6 +145,7 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
         console.error(`❌ EventSource readyState: ${eventSource.readyState}`);
         console.error(`❌ EventSource URL: ${eventSource.url}`);
         console.error(`❌ EventSource withCredentials: ${eventSource.withCredentials}`);
+        console.error(`❌ Error occurred at: ${new Date().toISOString()}`);
         setIsConnected(false);
         setIsConnecting(false);
         setError(errorMessage);
