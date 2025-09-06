@@ -5,6 +5,7 @@ import { Box, Container, Typography } from '@mui/material';
 import DashboardLayout from '@/components/DashboardLayout';
 import DashboardStatsCards from '@/components/dashboard/StatsCards';
 import ActiveSessions from '@/components/dashboard/ActiveSessions';
+import { useDashboardStats } from '@/hooks/useDatabase';
 import { useSessionsSSE } from '@/hooks/useSSE';
 
 export default function DashboardPage() {
