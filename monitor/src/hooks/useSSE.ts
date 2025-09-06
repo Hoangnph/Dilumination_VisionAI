@@ -92,7 +92,11 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
     try {
       const url = buildSSEUrl();
       console.log(`Connecting to SSE: ${url}`);
+      console.log(`Creating EventSource with URL: ${url}`);
       const eventSource = new EventSource(url);
+      console.log(`EventSource created successfully`);
+      console.log(`EventSource readyState: ${eventSource.readyState}`);
+      console.log(`EventSource URL: ${eventSource.url}`);
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
@@ -157,7 +161,12 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
       };
 
     } catch (err) {
-      console.error(`Failed to create SSE connection to ${endpoint}:`, err);
+      console.error(`❌ Failed to create SSE connection to ${endpoint}:`, err);
+      console.error(`❌ Error details:`, {
+        message: err instanceof Error ? err.message : 'Unknown error',
+        stack: err instanceof Error ? err.stack : undefined,
+        url: buildSSEUrl()
+      });
       setError(err instanceof Error ? err.message : 'Connection failed');
       setIsConnected(false);
       setIsConnecting(false);
