@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
+      let isClosed = false;
       
       // Send initial connection message
       const connectionMessage = createSSEMessage('connection', null, 'Connected to movements SSE');
@@ -21,22 +22,31 @@ export async function GET(request: NextRequest) {
           return;
         }
 
-        const message = createSSEMessage('data', data);
-        controller.enqueue(encoder.encode(encodeSSEMessage(message)));
+        if (!isClosed) {
+          const message = createSSEMessage('data', data);
+          controller.enqueue(encoder.encode(encodeSSEMessage(message)));
+        }
       };
 
       // Start listening
       dbListener.listen('movement_changes', handleMovementChange)
         .catch(error => {
           console.error('Error starting movement listener:', error);
-          const errorMessage = createSSEMessage('error', null, 'Failed to start movement listener', error.message);
-          controller.enqueue(encoder.encode(encodeSSEMessage(errorMessage)));
+          if (!isClosed) {
+            const errorMessage = createSSEMessage('error', null, 'Failed to start movement listener', error.message);
+            controller.enqueue(encoder.encode(encodeSSEMessage(errorMessage)));
+          }
         });
 
       // Handle client disconnect
       request.signal.addEventListener('abort', async () => {
+        isClosed = true;
         await dbListener.unlisten('movement_changes', handleMovementChange);
-        controller.close();
+        try {
+          controller.close();
+        } catch (error) {
+          // Controller might already be closed, ignore error
+        }
       });
     }
   });

@@ -174,6 +174,27 @@ export function useSessionsSSE(sessionId?: string) {
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Fetch initial data
+  const fetchInitialData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/sessions?page=1&limit=100');
+      const data = await response.json();
+      if (data.success && data.data?.data) {
+        setSessions(data.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching initial sessions:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch initial data on mount
+  useEffect(() => {
+    fetchInitialData();
+  }, [fetchInitialData]);
+
   const { isConnected, error, lastMessage } = useSSE('/api/sse/sessions', {
     sessionId,
     onMessage: (message) => {
@@ -194,12 +215,11 @@ export function useSessionsSSE(sessionId?: string) {
               return prevSessions;
           }
         });
-        setLoading(false);
       }
     }
   });
 
-  return { sessions, loading, isConnected, error, lastMessage };
+  return { sessions, loading, isConnected, error, lastMessage, refetch: fetchInitialData };
 }
 
 export function useMovementsSSE(sessionId?: string) {
