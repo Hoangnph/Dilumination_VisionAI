@@ -28,10 +28,19 @@ export async function GET(request: NextRequest) {
         }
       };
 
-      // Start listening
-      dbListener.listen('session_changes', handleSessionChange)
+      // Start listening with timeout
+      console.log('[SSE Sessions] Starting database listener...');
+      const listenPromise = dbListener.listen('session_changes', handleSessionChange);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Database listener timeout')), 10000);
+      });
+      
+      Promise.race([listenPromise, timeoutPromise])
+        .then(() => {
+          console.log('[SSE Sessions] Database listener started successfully');
+        })
         .catch(error => {
-          console.error('Error starting session listener:', error);
+          console.error('[SSE Sessions] Error starting session listener:', error);
           if (!isClosed) {
             const errorMessage = createSSEMessage('error', null, 'Failed to start session listener', error.message);
             controller.enqueue(encoder.encode(encodeSSEMessage(errorMessage)));
