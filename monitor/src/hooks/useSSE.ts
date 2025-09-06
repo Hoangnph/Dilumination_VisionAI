@@ -97,6 +97,7 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
       console.log(`EventSource created successfully`);
       console.log(`EventSource readyState: ${eventSource.readyState}`);
       console.log(`EventSource URL: ${eventSource.url}`);
+      console.log(`EventSource withCredentials: ${eventSource.withCredentials}`);
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
