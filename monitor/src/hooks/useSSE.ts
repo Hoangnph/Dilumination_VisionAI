@@ -106,6 +106,7 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
         console.log(`✅ EventSource URL: ${eventSource.url}`);
         console.log(`✅ EventSource withCredentials: ${eventSource.withCredentials}`);
         console.log(`✅ Connection established at: ${new Date().toISOString()}`);
+        console.log(`✅ EventSource readyState after open: ${eventSource.readyState}`);
         setIsConnected(true);
         setIsConnecting(false);
         setError(null);
