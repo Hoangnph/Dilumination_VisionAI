@@ -114,6 +114,8 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
 
       eventSource.onmessage = (event) => {
         console.log(`📨 SSE message received:`, event.data);
+        console.log(`📨 Event type:`, event.type);
+        console.log(`📨 Event lastEventId:`, event.lastEventId);
         try {
           const message: SSEMessage = JSON.parse(event.data);
           console.log(`📨 Parsed message:`, message);

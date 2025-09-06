@@ -13,10 +13,23 @@ export async function GET(request: NextRequest) {
       const encoder = new TextEncoder();
       let isClosed = false;
       
-      // Send initial connection message
-      const connectionMessage = createSSEMessage('connection', null, 'Connected to sessions SSE');
-      console.log(`📤 [SSE Sessions] Sending connection message:`, connectionMessage);
-      controller.enqueue(encoder.encode(encodeSSEMessage(connectionMessage)));
+      // Send initial connection message with delay
+      setTimeout(() => {
+        if (!isClosed) {
+          const connectionMessage = createSSEMessage('connection', null, 'Connected to sessions SSE');
+          console.log(`📤 [SSE Sessions] Sending connection message:`, connectionMessage);
+          controller.enqueue(encoder.encode(encodeSSEMessage(connectionMessage)));
+          
+          // Send test message immediately after connection
+          setTimeout(() => {
+            if (!isClosed) {
+              const testMessage = createSSEMessage('test', { message: 'Test message from server' }, 'Test');
+              console.log(`📤 [SSE Sessions] Sending test message:`, testMessage);
+              controller.enqueue(encoder.encode(encodeSSEMessage(testMessage)));
+            }
+          }, 50);
+        }
+      }, 100); // 100ms delay
 
       // Send heartbeat every 30 seconds to keep connection alive
       const heartbeatInterval = setInterval(() => {
